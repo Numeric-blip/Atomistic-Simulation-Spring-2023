@@ -1,0 +1,482 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Numeric-blip/Atomistic-Simulation-Spring-2023/blob/main/Leonard-Jones%20Potential\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import numpy as np\n",
+        "import scipy.optimize\n",
+        "from matplotlib import pyplot as plt\n",
+        "plt.rcParams.update({'font.size': 16})"
+      ],
+      "outputs": [],
+      "execution_count": null,
+      "metadata": {
+        "id": "x6Jme5AuqbJ8",
+        "execution": {
+          "iopub.status.busy": "2021-01-19T23:59:44.495Z",
+          "iopub.execute_input": "2021-01-19T23:59:44.505Z",
+          "iopub.status.idle": "2021-01-19T23:59:45.331Z",
+          "shell.execute_reply": "2021-01-19T23:59:45.339Z"
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Copyright (c) 2023 Alexander Urban \n",
+        "\n",
+        "# The Lennard-Jones Potential"
+      ],
+      "metadata": {
+        "id": "qlrDsWjFAM5p"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "The Lennard-Jones (LJ) potential is given by the following equation\n",
+        "\n",
+        "$$\n",
+        "V(r) \n",
+        "= \\varepsilon \\left[ \n",
+        "    \\left(\\frac{r_0}{r}\\right)^{12}\n",
+        "    -2\\left(\\frac{r_0}{r}\\right)^{6}\n",
+        "  \\right]\n",
+        "$$\n",
+        "\n",
+        "An implementation in Python is only a few lines long:"
+      ],
+      "metadata": {
+        "id": "2dm7FZC_Bi3I"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def V_LJ(r, eps, r0):\n",
+        "  return eps*((r0/r)**12 - 2*(r0/r)**6)"
+      ],
+      "outputs": [],
+      "execution_count": null,
+      "metadata": {
+        "id": "pYGSoSkSqfGr"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Let's plot the potential to confirm that it looks as expected.  We will arbitrarily set the minimum bond length to $r_0 = 1.0$ Å and the dissociation energy to $\\varepsilon = 1.0$ eV."
+      ],
+      "metadata": {
+        "id": "EHyv-ecjjXFK"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "eps = 1.0  # eV\n",
+        "r0 = 1.0  # Ang\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "r = np.linspace(0.5, 2.5, 100)\n",
+        "E = V_LJ(r, eps, r0)\n",
+        "ax.plot(r, E)\n",
+        "ax.set_ylim(-1.0, 1.0)\n",
+        "ax.set_xlabel(\"Interatomic Distance (Å)\")\n",
+        "ax.set_ylabel(\"Potential Energy (eV)\")\n",
+        "plt.show()"
+      ],
+      "metadata": {
+        "id": "-8PRjabzjWc0"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Question\n",
+        "\n",
+        "Given three atoms with the Cartesian positions\n",
+        "\n",
+        "$$\n",
+        "\\vec{r}_1 = \\begin{pmatrix}\n",
+        "0.0 \\\\ 0.0 \\\\ 0.0\n",
+        "\\end{pmatrix}\n",
+        "\\quad,\\quad\n",
+        "\\vec{r}_2 = \\begin{pmatrix}\n",
+        "0.75 \\\\ 0.75 \\\\ 0.0\n",
+        "\\end{pmatrix}\n",
+        "\\quad\\text{and}\\quad\n",
+        "\\vec{r}_3 = \\begin{pmatrix}\n",
+        "0.0 \\\\ -0.75 \\\\ 0.5\n",
+        "\\end{pmatrix}\n",
+        "$$\n",
+        "\n",
+        "What is the energy of the atomic structure?  What is the contribution of each bond?"
+      ],
+      "metadata": {
+        "id": "xTULUHi3mEs1"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "r1 = np.array([0.0, 0.0, 0.0])\n",
+        "r2 = np.array([0.75, 0.75, 0.0])\n",
+        "r3 = np.array([0.0, -0.75, 0.5])\n",
+        "\n",
+        "r12 = np.linalg.norm(r2 - r1)\n",
+        "E12 = V_LJ(r12, eps, r0)\n",
+        "print(\"r12 = {}\".format(r12))\n",
+        "print(\"E12 = {}\".format(E12))\n",
+        "\n",
+        "# TBC - how many energy contributions are there?\n",
+        "\n",
+        "E_total = E12  # + ... TBC\n",
+        "print(\"E_total = {}\".format(E_total))"
+      ],
+      "outputs": [],
+      "execution_count": null,
+      "metadata": {
+        "id": "6okg1lh-rSEI"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Forces\n",
+        "\n",
+        "The force acting between two atoms is the negative gradient of the potential energy, so in general for an atom $i$\n",
+        "\n",
+        "$$\n",
+        "\\vec{F}_{i} = -\\vec{\\nabla}_i E = -\\begin{pmatrix}\n",
+        "  \\frac{\\partial}{\\partial r_{i,1}} \\\\\n",
+        "  \\frac{\\partial}{\\partial r_{i,2}} \\\\\n",
+        "  \\frac{\\partial}{\\partial r_{i,3}}\n",
+        "  \\end{pmatrix} E\n",
+        "$$\n",
+        "\n",
+        "However, for pair potentials we can evaluate the force that is acting in the direction of the bond, which is a bit simpler. The contribution to the force acting on atom $i$ due to a bond formed with atom $j$ is then\n",
+        "\n",
+        "$$\n",
+        "\\vec{F}_{i(j)} = - \\frac{\\vec{r}_j - \\vec{r}_i}{r_{ij}} \\frac{\\partial}{\\partial r_{ij}} V(r_{ij})\n",
+        "\\quad\\text{with}\\quad\n",
+        "r_{ij} = |\\vec{r}_j - \\vec{r}_i|\n",
+        "$$\n",
+        "\n",
+        "Note that due to Newton's third law (*action = reaction*) the force acting on atom $j$ is identical but with the opposite sign, $\\vec{F}_{j(i)}=-\\vec{F}_{i(j)}$.\n",
+        "\n",
+        "To evaluate the forces, we need the derivative of the Lennard-Jones potential\n",
+        "\n",
+        "$$\n",
+        "\\frac{\\mathrm{d}V(r)}{\\mathrm{d}r}\n",
+        "= -\\frac{12}{r}\\varepsilon\\left[ \n",
+        "    \\left(\\frac{r_0}{r}\\right)^{12}\n",
+        "    -\\left(\\frac{r_0}{r}\\right)^{6}\n",
+        "  \\right]\n",
+        "$$\n",
+        "\n",
+        "And here is the implementation of the derivative and the force expression in Python:"
+      ],
+      "metadata": {
+        "id": "CsClLxepv_PT"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def dV_LJ(r, eps, r0):\n",
+        "  return -12/r*eps*((r0/r)**12 - (r0/r)**6)\n",
+        "\n",
+        "def F_i(r_i, r_j, eps, r0):\n",
+        "  r_ij_vec = r_i - r_j\n",
+        "  r_ij = np.linalg.norm(r_ij_vec)\n",
+        "  return -r_ij_vec/r_ij*dV_LJ(r_ij, eps, r0)"
+      ],
+      "outputs": [],
+      "execution_count": null,
+      "metadata": {
+        "id": "gP8ggLD9rmtE"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Plotting the derivative together with the potential.  If everything is correct, the derivative should be zero at the equilibrium bond length."
+      ],
+      "metadata": {
+        "id": "dQdzcR6rXm59"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "eps = 1.0  # eV\n",
+        "r0 = 1.0  # Ang\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "r = np.linspace(0.5, 2.5, 100)\n",
+        "E = V_LJ(r, eps, r0)\n",
+        "dE = dV_LJ(r, eps, r0)\n",
+        "ax.plot(r, E, label='Energy')\n",
+        "ax.plot(r, dE, label='Gradient')\n",
+        "ax.plot(r, [0 for x in r], '--')\n",
+        "ax.set_xlim(min(r), max(r))\n",
+        "ax.set_ylim(-1.1, 3.0)\n",
+        "ax.set_xlabel(\"Interatomic Distance (Å)\")\n",
+        "ax.set_ylabel(\"Energy (eV) / Gradient (eV/Å)\")\n",
+        "ax.legend()\n",
+        "plt.show()"
+      ],
+      "metadata": {
+        "id": "ZGLpgFs9YCEc"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "We can confirm that the force acting between two atoms separated by exactly 1.0 Å is indeed zero."
+      ],
+      "metadata": {
+        "id": "n4pUrm6og_bp"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "F = F_i(np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), eps, r0)  # force acting on atom 1 due to atom 2\n",
+        "print(\"F = {} eV/Å\".format(F))"
+      ],
+      "metadata": {
+        "id": "y-yFl23xhV0V"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Question\n",
+        "\n",
+        "What is the total force acting on atom 1?  What are the contributions from both atom 2 and 3?\n"
+      ],
+      "metadata": {
+        "id": "uslI0mZ_y-Tn"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# TBC"
+      ],
+      "outputs": [],
+      "execution_count": null,
+      "metadata": {
+        "id": "8BWm2zJax039"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Geometry Optimization\n",
+        "\n",
+        "The process of adjusting the atomic positions in an atomic structure such that the force acting on all atoms is zero is called *geometry optimization* (or *relaxation*).  In other words, a geometry optimization searches for the nearest local minimum of the potential energy surface (see lecture slides).\n",
+        "\n",
+        "We can use Python to optimize our structure with three atoms.  For this purpose, it is convenient to define a total energy function. "
+      ],
+      "metadata": {
+        "id": "_uu3xaRbgLlm"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def total_energy(x):\n",
+        "  # parameters of the LJ potential\n",
+        "  eps = 1.0\n",
+        "  r0 = 1.0\n",
+        "  # current coordinates of the three atoms\n",
+        "  r1 = np.array(x[:3])\n",
+        "  r2 = np.array(x[3:6])\n",
+        "  r3 = np.array(x[6:])\n",
+        "  # energy evaluation\n",
+        "  r12 = np.linalg.norm(r2 - r1)\n",
+        "  E12 = V_LJ(r12, eps, r0)\n",
+        "  r13 = np.linalg.norm(r3 - r1)\n",
+        "  E13 = V_LJ(r13, eps, r0)\n",
+        "  r23 = np.linalg.norm(r3 - r2)\n",
+        "  E23 = V_LJ(r23, eps, r0)\n",
+        "  return E12 + E13 + E23"
+      ],
+      "metadata": {
+        "id": "5v6DYtkhEGIB"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Now we can use this function as input for the geometry optimization."
+      ],
+      "metadata": {
+        "id": "f_QOvpGikpM6"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# combine all coordinates into one vector\n",
+        "x0 = np.concatenate((r1, r2, r3))\n",
+        "\n",
+        "# run the optimization\n",
+        "res = scipy.optimize.minimize(total_energy, x0)\n",
+        "\n",
+        "# read the optimized positions from the results\n",
+        "r1_new = res.x[:3]\n",
+        "r2_new = res.x[3:6]\n",
+        "r3_new = res.x[6:]\n",
+        "\n",
+        "print(r1_new)\n",
+        "print(r2_new)\n",
+        "print(r3_new)"
+      ],
+      "metadata": {
+        "id": "soUekUbrjwVN"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Question\n",
+        "\n",
+        "Do the optimized atomic positions correspond to an energy minimum?  Confirm.  Did we really have to optimize the coordinates of all three atoms?"
+      ],
+      "metadata": {
+        "id": "T1tI42iYm2Ev"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# TBC"
+      ],
+      "metadata": {
+        "id": "S0jolGswmvBz"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Structure Visualization\n",
+        "\n",
+        "In this section we will use the *Atomic Simulation Environment* (ASE) to visualize our trimer structures.  ASE has many features, and we could have used it directly to perform a geometry optimization with the LJ potential.  See the ASE website for more information: https://wiki.fysik.dtu.dk/ase/\n",
+        "\n",
+        "First we need to install ASE:"
+      ],
+      "metadata": {
+        "id": "k1NiXwsRnwEE"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "! pip install ase"
+      ],
+      "metadata": {
+        "id": "roE5savoobAu"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from ase.visualize import view\n",
+        "from ase import Atoms"
+      ],
+      "metadata": {
+        "id": "yu163bz1oRsO"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "structure1 = Atoms(positions=[r1, r2, r3])\n",
+        "view(structure1, viewer='x3d')"
+      ],
+      "metadata": {
+        "id": "zhvmf4HGohbw"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "structure1 = Atoms(positions=[r1_new, r2_new, r3_new])\n",
+        "view(structure1, viewer='x3d')"
+      ],
+      "metadata": {
+        "id": "K1OzhWvspCy_"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "Ofa4_k4Jo11W"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python",
+      "version": "3.8.3",
+      "mimetype": "text/x-python",
+      "codemirror_mode": {
+        "name": "ipython",
+        "version": 3
+      },
+      "pygments_lexer": "ipython3",
+      "nbconvert_exporter": "python",
+      "file_extension": ".py"
+    },
+    "nteract": {
+      "version": "0.27.0"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
